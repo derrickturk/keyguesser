@@ -34,35 +34,26 @@ let rec leave_one_out = function
 
 let zip xs ys = List.map2 (fun x y -> (x, y)) xs ys
 
+(* list/nondet monad *)
+let (let*) xs f = List.concat_map f xs
+let return x = [x]
+let guard b xs = if b then xs else []
+
 let possible_fks names tbls =
-  let candidates = leave_one_out (zip names tbls) in
-  let pick_fks_for fk_tbl (col, keys) ref_tbl ref_cols =
-    let is_match (col', keys') = col = col' && KeySet.subset keys keys' in
-    let tag_match (col', _) = (fk_tbl, col, ref_tbl, col') in
-    List.map tag_match (List.filter is_match ref_cols)
-  in
-  let pick_fks ((fk_tbl, fk_cols), tos) = List.concat_map
-    (fun fk_col -> List.concat_map
-      (fun (ref_tbl, ref_cols) -> pick_fks_for fk_tbl fk_col ref_tbl ref_cols)
-      tos)
-    fk_cols
-  in
-  List.concat_map pick_fks candidates
+  let* ((fk_tbl, fk_cols), others) = leave_one_out (zip names tbls) in
+  let* (col, keys) = fk_cols in
+  let* (ref_tbl, ref_cols) = others in
+  let* (col', keys') = ref_cols in
+  guard (col = col' && KeySet.subset keys keys')
+    (return (fk_tbl, col, ref_tbl, col'))
 
 let possible_fks_loose names tbls =
-  let candidates = leave_one_out (zip names tbls) in
-  let pick_fks_for fk_tbl (col, keys) ref_tbl ref_cols =
-    let is_match (_, keys') = KeySet.subset keys keys' in
-    let tag_match (col', _) = (fk_tbl, col, ref_tbl, col') in
-    List.map tag_match (List.filter is_match ref_cols)
-  in
-  let pick_fks ((fk_tbl, fk_cols), tos) = List.concat_map
-    (fun fk_col -> List.concat_map
-      (fun (ref_tbl, ref_cols) -> pick_fks_for fk_tbl fk_col ref_tbl ref_cols)
-      tos)
-    fk_cols
-  in
-  List.concat_map pick_fks candidates
+  let* ((fk_tbl, fk_cols), others) = leave_one_out (zip names tbls) in
+  let* (col, keys) = fk_cols in
+  let* (ref_tbl, ref_cols) = others in
+  let* (col', keys') = ref_cols in
+  guard (KeySet.subset keys keys')
+    (return (fk_tbl, col, ref_tbl, col'))
 
 let () =
   let names = List.tl @@ Array.to_list Sys.argv in
